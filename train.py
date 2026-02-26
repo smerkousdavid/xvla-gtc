@@ -78,6 +78,25 @@ def get_args_parser():
     # Data
     parser.add_argument("--train_metas_path", type=str, required=True, help="Path to training metadata")
     parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--num_workers", type=int, default=16, help="PyTorch DataLoader worker processes")
+    parser.add_argument(
+        "--action_mode",
+        type=str,
+        default=None,
+        help="Override model action mode at load time (e.g., auto, ee6d, joint)",
+    )
+    parser.add_argument(
+        "--real_action_dim",
+        type=int,
+        default=None,
+        help="Used with action_mode=auto; loss is computed on first real_action_dim dims",
+    )
+    parser.add_argument(
+        "--max_action_dim",
+        type=int,
+        default=None,
+        help="Used with action_mode=auto; model-facing padded action dim",
+    )
 
     # Optimizer
     parser.add_argument("--learning_rate", type=float, default=1e-4)
@@ -189,9 +208,23 @@ def main(args):
     set_seed(args.seed + accelerator.process_index)
     logger.info(f"Args: {args}")
 
-    # Load model & processor
-    model = XVLA.from_pretrained(args.models)
+    # Load model & processor (allow runtime config override).
+    model_kwargs = {}
+    if args.action_mode is not None:
+        model_kwargs["action_mode"] = args.action_mode
+    if args.real_action_dim is not None:
+        model_kwargs["real_action_dim"] = int(args.real_action_dim)
+    if args.max_action_dim is not None:
+        model_kwargs["max_action_dim"] = int(args.max_action_dim)
+
+    model = XVLA.from_pretrained(args.models, **model_kwargs)
     processor = XVLAProcessor.from_pretrained(args.models)
+    logger.info(
+        "Loaded model action setup: mode=%s real_action_dim=%s max_action_dim=%s",
+        getattr(model.config, "action_mode", None),
+        getattr(model.config, "real_action_dim", None),
+        getattr(model.config, "max_action_dim", None),
+    )
 
     # Iterable dataloader (don't wrap with prepare)
     train_dataloader = create_dataloader(
@@ -200,6 +233,7 @@ def main(args):
         num_actions=model.num_actions,
         action_mode=model.action_mode,
         training=True,
+        num_workers=args.num_workers,
     )
 
     # Optimizer
@@ -217,10 +251,37 @@ def main(args):
     global_step, t0 = 0, time.time()
     logger.info(f"🚀 Start training for {args.iters} iterations | world_size={accelerator.num_processes}")
     
+    logged_batch_ranges = False
     for batch in train_dataloader:
+        if not logged_batch_ranges:
+            action_b = batch.get("action")
+            proprio_b = batch.get("proprio")
+            vad = batch.get("valid_action_dim")
+            try:
+                action_min = float(action_b.min().item()) if action_b is not None else float("nan")
+                action_max = float(action_b.max().item()) if action_b is not None else float("nan")
+                proprio_min = float(proprio_b.min().item()) if proprio_b is not None else float("nan")
+                proprio_max = float(proprio_b.max().item()) if proprio_b is not None else float("nan")
+                valid_dims = vad.detach().cpu().tolist() if isinstance(vad, torch.Tensor) else vad
+                logger.info(
+                    "First batch stats: action=[%.4f, %.4f] proprio=[%.4f, %.4f] valid_action_dim(sample)=%s",
+                    action_min,
+                    action_max,
+                    proprio_min,
+                    proprio_max,
+                    str(valid_dims[:8] if isinstance(valid_dims, list) else valid_dims),
+                )
+            except Exception:
+                logger.info("First batch stats unavailable.")
+            logged_batch_ranges = True
+
         # Encode language
         lang = processor.encode_language(batch["language_instruction"])
         batch.pop("language_instruction", None)
+        # Drop metadata-only fields that are useful for eval/debug but are not
+        # accepted by XVLA.forward during training.
+        batch.pop("episode_index", None)
+        batch.pop("anchor_index", None)
         inputs = {**batch, **lang}
         inputs = {k: v.cuda(non_blocking=True) for k, v in inputs.items()}
         # Update LR per group

@@ -55,27 +55,23 @@ class XVLA(PreTrainedModel):
         # Core settings
         self.num_actions: int = config.num_actions
         self.use_proprio: bool = config.use_proprio
-        self.action_mode: str = config.action_mode.lower()
+
         # Action space (dimensions + hooks)
-        if config.action_mode.lower() == "auto":
-            self.action_space = build_action_space(
-                config.action_mode.lower(),
-                real_dim=config.real_action_dim,
-                max_dim=config.max_action_dim,
-            )
-        else:
-            self.action_space = build_action_space(config.action_mode.lower())
+        self.action_space = build_action_space(config.action_mode.lower())
         dim_action = self.action_space.dim_action
         dim_proprio = getattr(self.action_space, "dim_proprio", dim_action)
 
         # Florence2 backbone (encoder only)
-        self.vlm = Florence2ForConditionalGeneration(config.florence_config).to(torch.float32)
+        self.vlm = Florence2ForConditionalGeneration(config.florence_config)
         if hasattr(self.vlm, "language_model"):
             lm = self.vlm.language_model
             if hasattr(lm, "model") and hasattr(lm.model, "decoder"):
                 del lm.model.decoder
             if hasattr(lm, "lm_head"):
                 del lm.lm_head
+        # ⚠️ VERY IMPORTANT: disable Florence2's tie_weights hooks to avoid decoder access
+        if hasattr(self.vlm, "tie_weights"):
+            self.vlm.tie_weights = lambda *a, **k: None
 
         projection_dim = getattr(self.vlm.config, "projection_dim", None)
         if projection_dim is None:
@@ -99,6 +95,10 @@ class XVLA(PreTrainedModel):
 
         # Deferred FastAPI app
         self.app: FastAPI | None = None
+
+    def tie_weights(self):
+        """Disable automatic weight tying (Florence is encoder-only)."""
+        return
 
     # ============================= Florence2 encoder =============================
     def forward_vlm(
@@ -153,7 +153,6 @@ class XVLA(PreTrainedModel):
         domain_id: torch.LongTensor,
         proprio: torch.Tensor,
         action: torch.Tensor,  # [B, T=num_actions, D=dim_action]
-        valid_action_dim: torch.Tensor | None = None,
     ) -> Dict[str, torch.Tensor]:
         """
         1) Encode multimodal inputs.
@@ -167,12 +166,7 @@ class XVLA(PreTrainedModel):
              + torch.arange(B, device=input_ids.device) / B) % (1 - 1e-5)
 
         action_noisy = torch.randn_like(action) * t.view(-1, 1, 1) + action * (1 - t).view(-1, 1, 1)
-        if self.action_mode == "auto":
-            proprio_m, action_noisy_m = self.action_space.preprocess(
-                proprio, action_noisy, valid_action_dim=valid_action_dim
-            )
-        else:
-            proprio_m, action_noisy_m = self.action_space.preprocess(proprio, action_noisy)
+        proprio_m, action_noisy_m = self.action_space.preprocess(proprio, action_noisy)
 
         pred_action = self.transformer(
             domain_id=domain_id,
@@ -181,8 +175,6 @@ class XVLA(PreTrainedModel):
             proprio=proprio_m,
             **enc,
         )
-        if self.action_mode == "auto":
-            return self.action_space.compute_loss(pred_action, action, valid_action_dim=valid_action_dim)
         return self.action_space.compute_loss(pred_action, action)
 
     # ================================= inference =================================

@@ -28,13 +28,15 @@ def create_dataloader(batch_size: int,
                       metas_path: str, 
                       num_actions: int,
                       training: bool,
-                      action_mode: str
+                      action_mode: str,
+                      num_workers: int = 4,
                       ):
+    num_workers = max(int(num_workers), 0)
     return DataLoader(
         InfiniteDataReader(metas_path, num_actions=num_actions, training=training, action_mode = action_mode),
         batch_size=batch_size,
-        num_workers=4,
+        num_workers=num_workers,
         pin_memory=True,
         worker_init_fn=worker_init_fn,
-        persistent_workers=True
+        persistent_workers=(num_workers > 0)
     )

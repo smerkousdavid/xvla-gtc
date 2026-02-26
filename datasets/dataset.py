@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 from typing import Dict, Iterable, List
-import io, json, random, numpy as np, torch
+import io, json, os, random, numpy as np, torch
 from torch.utils.data import IterableDataset
 from torchvision import transforms
 from torchvision.transforms import InterpolationMode
@@ -49,6 +49,7 @@ class InfiniteDataReader(IterableDataset):
         self.training = training
         self.num_actions = num_actions
         self.action_mode = action_mode
+        self.xarm_weight_multiplier = float(os.getenv("XARM_WEIGHT_MULTIPLIER", "1.0"))
         self.metas: Dict[str, dict] = {}
         print("use action mode:", action_mode)
         if fileio.isdir(metas_path):
@@ -104,6 +105,10 @@ class InfiniteDataReader(IterableDataset):
                     idx_for_delta = sample.pop("idx_for_delta", [])
                     idx_for_mask_proprio = sample.pop("idx_for_mask_proprio", [])
                     sample.update(action_slice(sample.pop("abs_trajectory", None), idx_for_delta, idx_for_mask_proprio))
+                    if "valid_action_dim" not in sample:
+                        sample["valid_action_dim"] = torch.tensor(int(sample["action"].shape[-1]), dtype=torch.long)
+                    elif not isinstance(sample["valid_action_dim"], torch.Tensor):
+                        sample["valid_action_dim"] = torch.tensor(int(sample["valid_action_dim"]), dtype=torch.long)
                     yield sample
         if self.training: yield from self._iter_one_dataset(dataset_name)
 
@@ -115,7 +120,12 @@ class InfiniteDataReader(IterableDataset):
         else:
             #names = names * 2 # increase the dataset sampling frequency
             gens = [iter(self._iter_one_dataset(n)) for n in names]
-            ws = [DATA_WEIGHTS.get(n, 1.0) for n in names]
+            ws = []
+            for n in names:
+                w = float(DATA_WEIGHTS.get(n, 1.0))
+                if n == "xarm-lab-data":
+                    w *= self.xarm_weight_multiplier
+                ws.append(w)
             s = sum(ws); ws = [w / s for w in ws]
             while True:
                 i = random.choices(range(len(names)), weights=ws, k=1)[0]

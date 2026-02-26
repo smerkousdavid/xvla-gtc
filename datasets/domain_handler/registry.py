@@ -27,6 +27,8 @@ from .real_world import AIRAgilexHandler, AIRAgilexHQHandler, AIRBotHandler, Wid
 from .simulations import BridgeHandler, LiberoHandler, VLABenchHandler, RobotWin2Handler, RobocasaHumanHandler, CalvinHandler, RT1Handler
 from .lerobotv21 import LeRobotV21Handler
 from .x2robot import X2RobotHandler
+from .lerobot_pickup import LeRobotPickupHandler
+from .lerobot_xarm_lab import LeRobotXArmLabHandler
 
 # 1) Exact registry only (no heuristics)
 _REGISTRY: Dict[str, Type[DomainHandler]] = {
@@ -36,6 +38,13 @@ _REGISTRY: Dict[str, Type[DomainHandler]] = {
 
     # Lerobot (v2.1 - sim)
     "lift2": LeRobotV21Handler,
+    "pickup-blender": LeRobotPickupHandler,
+    "pickup-mujoco": LeRobotPickupHandler,
+    "insert-blender": LeRobotPickupHandler,
+    "insert-mujoco": LeRobotPickupHandler,
+    "insert_centrifuge_5430-blender": LeRobotPickupHandler,
+    "screw_loose-blender": LeRobotPickupHandler,
+    "xarm-lab-data": LeRobotXArmLabHandler,
     
     # LeRobot (parquet)
     "AGIBOT": AGIBOTLeRobotHandler,

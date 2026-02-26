@@ -1,0 +1,12 @@
+/home/nvidia/miniforge3/envs/XVLA/bin/python /home/nvidia/Documents/X-VLA/open_loop_eval.py \
+  --model /home/nvidia/Documents/X-VLA/outputs/xvla_multidomain_20260223_085934/ckpt-50000 \
+  --metas_path /home/nvidia/Documents/X-VLA/datasets/generated_metas/xarm-lab-data.json \
+  --output_dir /home/nvidia/Documents/X-VLA/outputs/open_loop_eval_xarm_episode_mode \
+  --num_episodes 20 \
+  --seed 0 \
+  --chunk_steps 32 \
+  --num_rollouts 3 \
+  --steps 10 \
+  --action_mode auto \
+  --real_action_dim 14 \
+  --max_action_dim 20

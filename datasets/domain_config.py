@@ -35,7 +35,14 @@ DATA_WEIGHTS = {
     "agiworld-on-site-pour": 1.,
     "agiworld-on-site-microwave": 1.2,
     "agiworld-on-site-cloth": 1.2,
-    "agiworld-on-site-cloth-2": 0.1
+    "agiworld-on-site-cloth-2": 0.1,
+    "pickup-blender": 0.3,
+    "pickup-mujoco": 0.3,
+    "insert-blender": 0.2,
+    "insert-mujoco": 0.2,
+    "insert_centrifuge_5430-blender": 0.1,
+    "screw_loose-blender": 0.1,
+    "xarm-lab-data": 1.0,
 }
 
 DATA_DOMAIN_ID = {
@@ -79,5 +86,12 @@ DATA_DOMAIN_ID = {
     "lift2": 0,
 
     # x2robot
-    "x2robot": 0
+    "x2robot": 0,
+    "pickup-blender": 2, # so101
+    "pickup-mujoco": 2, # so101
+    "insert-blender": 0, # ur5
+    "insert-mujoco": 0,  # ur5
+    "insert_centrifuge_5430-blender": 0,  # ur5
+    "screw_loose-blender": 9,  # bimanual (so101)
+    "xarm-lab-data": 3, # xarm
 }
