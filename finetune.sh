@@ -13,7 +13,9 @@ cd "${SCRIPT_DIR}"
 # --------------------------- User-configurable ---------------------------
 MODEL_ID="${MODEL_ID:-2toINF/X-VLA-Pt}"
 DATA_ROOT="${DATA_ROOT:-/home/nvidia/Documents/datasets}"
-DATASETS_CSV="${DATASETS_CSV:-pickup-blender,pickup-mujoco,insert-blender,insert-mujoco,insert_centrifuge_5430-blender,screw_loose-blender,xarm-lab-data}"
+# Default: xarm-lab-data only.  For multi-domain, override e.g.:
+#   DATASETS_CSV="pickup-blender,insert-blender,xarm-lab-data"
+DATASETS_CSV="${DATASETS_CSV:-xarm-lab-data}"
 
 META_DIR="${META_DIR:-${SCRIPT_DIR}/datasets/generated_metas}"
 OUTPUT_DIR="${OUTPUT_DIR:-${SCRIPT_DIR}/outputs/xvla_multidomain_$(date +%Y%m%d_%H%M%S)}"
@@ -31,7 +33,9 @@ COSINE_DECAY="${COSINE_DECAY:-1}"
 SAVE_INTERVAL="${SAVE_INTERVAL:-5000}"
 LOG_INTERVAL="${LOG_INTERVAL:-20}"
 SEED="${SEED:-0}"
-ACTION_MODE="${ACTION_MODE:-auto}"
+# Action mode: "joint" for xarm joint-space control (JointActionSpace, 14D bimanual).
+# Use "auto" for multi-domain training with heterogeneous action dims.
+ACTION_MODE="${ACTION_MODE:-joint}"
 REAL_ACTION_DIM="${REAL_ACTION_DIM:-14}"
 MAX_ACTION_DIM="${MAX_ACTION_DIM:-20}"
 NUM_WORKERS="${NUM_WORKERS:-16}"

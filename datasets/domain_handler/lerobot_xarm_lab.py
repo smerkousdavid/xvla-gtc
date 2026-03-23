@@ -12,18 +12,46 @@ from ..utils import read_parquet, read_video_to_frames
 from .base import DomainHandler
 
 
+# ---------------------------------------------------------------------------
+# Switch between action representations produced by convert_to_lerobot.py.
+#   "ee6d"  -- abs ee6d actions: [xyz(3) + rot6d(6) + grip(1)] = 10D
+#              state is also 10D ee6d.  Fully absolute, no delta encoding.
+#   "joint" -- abs joint targets: [joint_pos(6) + grip(1)] = 7D
+#              state is [joint_pos(6) + grip(1)] = 7D.
+#              Parquet stores absolute positions; action_slice converts
+#              joint channels to deltas at training time via idx_for_delta.
+# ---------------------------------------------------------------------------
+ARM_MODE = "joint"
+
+
+# Per-mode constants ----------------------------------------------------------
+_MODE_CONFIG = {
+    "ee6d": {
+        "idx_for_delta": [],
+        "idx_for_mask_proprio": [],
+        "qdur": 2.0,
+    },
+    "joint": {
+        "idx_for_delta": [0, 1, 2, 3, 4, 5],
+        "idx_for_mask_proprio": [6],
+        "qdur": 1.0,
+    },
+}
+
+
 class LeRobotXArmLabHandler(DomainHandler):
     """
-    Handler for xarm-lab-data LeRobot dataset.
+    Handler for xarm-lab LeRobot v3 datasets (produced by convert_to_lerobot.py).
 
-    Special requirements:
-    - Use only two camera views:
-        - observation.images.zed_gripper
-        - observation.images.zed_high_left
-    - Resolve language from parquet task_index + meta task_map when available.
+    Supports two modes controlled by the module-level ARM_MODE flag:
+      - "ee6d":  absolute ee6d actions (10D) -- no delta encoding
+      - "joint": absolute joint targets (7D) -- delta-encoded at training time by action_slice
+
+    Camera view keys are read from meta["camera_views"] if present,
+    otherwise falls back to defaults.
     """
 
-    CAMERA_VIEW = [
+    CAMERA_VIEW_DEFAULTS = [
         "observation.images.zed_gripper",
         "observation.images.zed_high_left",
     ]
@@ -31,8 +59,10 @@ class LeRobotXArmLabHandler(DomainHandler):
     STATE_KEY = "observation.state"
     TASK_INDEX_KEY = "task_index"
     TASK_DESC_KEY = "annotation.human.action.task_description"
-    idx_for_delta = [0, 1, 2, 3, 4, 5]
-    idx_for_mask_proprio = [6]
+
+    @property
+    def _mode_cfg(self) -> dict:
+        return _MODE_CONFIG[ARM_MODE]
 
     def _resolve_instruction(self, data: dict, row_idx: int, fallback: str) -> str:
         task_map = self.meta.get("task_map", {}) or {}
@@ -44,7 +74,6 @@ class LeRobotXArmLabHandler(DomainHandler):
             except Exception:
                 task_idx = None
         if task_idx is None and self.TASK_DESC_KEY in data:
-            # In this dataset this field is int-like and mirrors task_index.
             try:
                 task_idx = int(data[self.TASK_DESC_KEY][row_idx])
             except Exception:
@@ -72,9 +101,11 @@ class LeRobotXArmLabHandler(DomainHandler):
         episode_index = int(item["episode_index"])
         chunk_size = int(self.meta.get("chunks_size", 1000))
         episode_chunk = episode_index // chunk_size
+        file_index = episode_index % chunk_size
 
         data_path = fileio.join_path(self.meta["root_path"], self.meta["data_path"]).format(
-            episode_chunk=episode_chunk, episode_index=episode_index
+            episode_chunk=episode_chunk, episode_index=episode_index,
+            chunk_index=episode_chunk, file_index=file_index,
         )
         data = read_parquet(data_path)
         if self.ACTION_KEY not in data:
@@ -87,22 +118,24 @@ class LeRobotXArmLabHandler(DomainHandler):
         if actions.ndim != 2 or states.ndim != 2:
             raise ValueError(f"Unexpected action/state dims in {data_path}: {actions.shape}, {states.shape}")
 
+        camera_views = self.meta.get("camera_views", self.CAMERA_VIEW_DEFAULTS)
         images = [
             read_video_to_frames(
                 fileio.join_path(self.meta["root_path"], self.meta["video_path"]).format(
-                    episode_chunk=episode_chunk, episode_index=episode_index, video_key=vkey
+                    episode_chunk=episode_chunk, episode_index=episode_index,
+                    chunk_index=episode_chunk, file_index=file_index,
+                    video_key=vkey,
                 )
             )
-            for vkey in self.CAMERA_VIEW
+            for vkey in camera_views
         ]
         image_mask = torch.zeros(self.num_views, dtype=torch.bool)
         image_mask[: min(self.num_views, len(images))] = True
 
-        # Keep behavior consistent with other handlers: action shifted by one.
         actions = np.concatenate([actions[:1], actions[:-1]], axis=0)
 
         fps = float(self.meta.get("fps", 20.0))
-        qdur = 1.0
+        qdur = self._mode_cfg["qdur"]
         t = np.arange(actions.shape[0], dtype=np.float64) / max(fps, 1e-8)
         if actions.shape[0] < 4:
             return
@@ -119,6 +152,9 @@ class LeRobotXArmLabHandler(DomainHandler):
         )
 
         fallback_instruction = item["tasks"][0] if item.get("tasks") else "Perform the task."
+
+        idx_for_delta = self._mode_cfg["idx_for_delta"]
+        idx_for_mask_proprio = self._mode_cfg["idx_for_mask_proprio"]
 
         for idx in idxs:
             instruction = self._resolve_instruction(data, idx, fallback_instruction)
@@ -154,6 +190,6 @@ class LeRobotXArmLabHandler(DomainHandler):
                 "valid_action_dim": int(d),
                 "episode_index": int(episode_index),
                 "anchor_index": int(idx),
-                "idx_for_delta": self.idx_for_delta,
-                "idx_for_mask_proprio": self.idx_for_mask_proprio,
+                "idx_for_delta": idx_for_delta,
+                "idx_for_mask_proprio": idx_for_mask_proprio,
             }

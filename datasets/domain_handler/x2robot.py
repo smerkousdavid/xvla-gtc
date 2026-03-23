@@ -25,7 +25,7 @@ class X2RobotHandler(DomainHandler):
                      *, num_actions, 
                      training, 
                      image_aug, 
-                     lang_aug_map, 
+                     lang_aug_map,
                      **kwargs):
         
         item = self.meta["datalist"][traj_idx]

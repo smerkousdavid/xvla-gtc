@@ -6,6 +6,9 @@ set -euo pipefail
 # - LR reduced by 10x
 # - xarm sampling weight multiplied by 2x
 # - train for +20k steps
+#
+# Inherits ACTION_MODE from finetune.sh (default: joint).
+# Override with e.g. ACTION_MODE=auto to change.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
