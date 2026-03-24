@@ -49,6 +49,15 @@ class LeRobotXArmLabHandler(DomainHandler):
 
     Camera view keys are read from meta["camera_views"] if present,
     otherwise falls back to defaults.
+
+    Optional ``view_config`` (passed via functools.partial in the registry)
+    enables per-episode random view sampling and per-sample view masking::
+
+        view_config = {
+            "available_views": ["observation.images.cam_a", ...],
+            "num_sample": 2,        # views to sample per episode
+            "mask_one_rate": 0.25,  # prob of masking one view (only when num_sample > 1)
+        }
     """
 
     CAMERA_VIEW_DEFAULTS = [
@@ -59,6 +68,10 @@ class LeRobotXArmLabHandler(DomainHandler):
     STATE_KEY = "observation.state"
     TASK_INDEX_KEY = "task_index"
     TASK_DESC_KEY = "annotation.human.action.task_description"
+
+    def __init__(self, meta: dict, num_views: int, view_config: dict | None = None) -> None:
+        super().__init__(meta, num_views)
+        self.view_config = view_config
 
     @property
     def _mode_cfg(self) -> dict:
@@ -118,7 +131,19 @@ class LeRobotXArmLabHandler(DomainHandler):
         if actions.ndim != 2 or states.ndim != 2:
             raise ValueError(f"Unexpected action/state dims in {data_path}: {actions.shape}, {states.shape}")
 
-        camera_views = self.meta.get("camera_views", self.CAMERA_VIEW_DEFAULTS)
+        if self.view_config is not None:
+            pool = list(self.view_config["available_views"])
+            num_sample = self.view_config.get("num_sample", len(pool))
+            num_sample = min(num_sample, len(pool), self.num_views)
+            if training:
+                sampled_views = random.sample(pool, num_sample)
+            else:
+                sampled_views = pool[:num_sample]
+            mask_one_rate = self.view_config.get("mask_one_rate", 0.0)
+        else:
+            sampled_views = list(self.meta.get("camera_views", self.CAMERA_VIEW_DEFAULTS))
+            mask_one_rate = 0.0
+
         images = [
             read_video_to_frames(
                 fileio.join_path(self.meta["root_path"], self.meta["video_path"]).format(
@@ -127,10 +152,12 @@ class LeRobotXArmLabHandler(DomainHandler):
                     video_key=vkey,
                 )
             )
-            for vkey in camera_views
+            for vkey in sampled_views
         ]
-        image_mask = torch.zeros(self.num_views, dtype=torch.bool)
-        image_mask[: min(self.num_views, len(images))] = True
+        num_loaded = len(images)
+        base_image_mask = torch.zeros(self.num_views, dtype=torch.bool)
+        base_image_mask[:min(self.num_views, num_loaded)] = True
+        can_mask = training and mask_one_rate > 0.0 and num_loaded > 1
 
         actions = np.concatenate([actions[:1], actions[:-1]], axis=0)
 
@@ -162,10 +189,15 @@ class LeRobotXArmLabHandler(DomainHandler):
                 instruction = random.choice(lang_aug_map[instruction])
 
             imgs = []
-            for v in range(min(self.num_views, len(images))):
+            for v in range(min(self.num_views, num_loaded)):
                 imgs.append(image_aug(Image.fromarray(images[v][idx])))
             while len(imgs) < self.num_views:
                 imgs.append(torch.zeros_like(imgs[0]))
+            image_mask = base_image_mask.clone()
+            if can_mask and random.random() < mask_one_rate:
+                mask_idx = random.randrange(num_loaded)
+                imgs[mask_idx] = torch.zeros_like(imgs[0])
+                image_mask[mask_idx] = False
             image_input = torch.stack(imgs, 0)
 
             cur = t[idx]

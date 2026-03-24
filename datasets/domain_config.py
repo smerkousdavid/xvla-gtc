@@ -38,11 +38,15 @@ DATA_WEIGHTS = {
     "agiworld-on-site-cloth-2": 0.1,
     "pickup-blender": 0.3,
     "pickup-mujoco": 0.3,
-    "insert-blender": 0.2,
-    "insert-mujoco": 0.2,
+    "insert-blender": 0.25,
+    "insert-mujoco": 0.25,
     "insert_centrifuge_5430-blender": 0.1,
     "screw_loose-blender": 0.1,
     "xarm-lab-data": 1.0,
+    "lerobotv3_bench_vortex_zed_multiview": 0.35,
+    "lerobotv3_bench_vortex_zed_four_stereo": 1.0,
+    "lerobotv3_office_vortex_realsense": 1.0,
+    "screw_tighten-mujoco": 0.1,
 }
 
 DATA_DOMAIN_ID = {
@@ -93,5 +97,9 @@ DATA_DOMAIN_ID = {
     "insert-mujoco": 0,  # ur5
     "insert_centrifuge_5430-blender": 0,  # ur5
     "screw_loose-blender": 9,  # bimanual (so101)
-    "xarm-lab-data": 3, # xarm
+    "screw_tighten-mujoco": 23,                      # sim
+    "xarm-lab-data": 3,                            # xarm (UNUSED)
+    "lerobotv3_bench_vortex_zed_multiview": 19,     # xarm – multiview ZED
+    "lerobotv3_bench_vortex_zed_four_stereo": 20,   # xarm – stereo ZED
+    "lerobotv3_office_vortex_realsense": 21,         # xarm – realsense
 }

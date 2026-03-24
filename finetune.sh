@@ -135,6 +135,11 @@ for ds in datasets:
                 if "task_index" in row and "task" in row:
                     task_map[int(row["task_index"])] = row["task"]
 
+    camera_views = [
+        k for k, v in info.get("features", {}).items()
+        if k.startswith("observation.images.") and v.get("dtype") in ("video", "image")
+    ]
+
     meta = {
         "dataset_name": ds,
         "root_path": str(ds_root),
@@ -145,6 +150,8 @@ for ds in datasets:
         "task_map": task_map,
         "datalist": datalist,
     }
+    if camera_views:
+        meta["camera_views"] = camera_views
 
     out_file = meta_dir / f"{ds}.json"
     with out_file.open("w") as f:

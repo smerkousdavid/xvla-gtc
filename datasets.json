@@ -1,0 +1,11 @@
+{
+  "lerobotv3_bench_vortex_zed_multiview": "smerkd/lerobotv3_bench_vortex_zed_multiview",
+  "lerobotv3_bench_vortex_zed_four_stereo": "smerkd/lerobotv3_bench_vortex_zed_four_stereo",
+  "lerobotv3_office_vortex_realsense": "smerkd/lerobotv3_office_vortex_realsense",
+  "pickup-blender": "autobio-bench/pickup-blender",
+  "insert-blender": "autobio-bench/insert-blender",
+  "screw_tighten-mujoco": "autobio-bench/screw_tighten-mujoco",
+  "insert-mujoco": "autobio-bench/insert-mujoco",
+  "pickup-mujoco": "autobio-bench/pickup-mujoco",
+  "insert_centrifuge_5430-blender": "autobio-bench/insert_centrifuge_5430-blender"
+}

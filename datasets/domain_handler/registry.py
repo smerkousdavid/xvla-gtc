@@ -15,7 +15,8 @@
 # ------------------------------------------------------------------------------
 
 from __future__ import annotations
-from typing import Dict, Type
+from functools import partial
+from typing import Callable, Dict, Type, Union
 from .base import DomainHandler
 
 # Handlers
@@ -30,14 +31,17 @@ from .x2robot import X2RobotHandler
 from .lerobot_pickup import LeRobotPickupHandler
 from .lerobot_xarm_lab import LeRobotXArmLabHandler
 
-# 1) Exact registry only (no heuristics)
-_REGISTRY: Dict[str, Type[DomainHandler]] = {
-    
+# Registry values can be a handler class or a functools.partial that binds
+# extra kwargs (e.g. view_config) to the handler constructor.
+HandlerFactory = Union[Type[DomainHandler], Callable[..., DomainHandler]]
+
+_REGISTRY: Dict[str, HandlerFactory] = {
+
     # X2Robot
     "x2robot": X2RobotHandler,
 
     # Lerobot (v2.1 - sim)
-    "lift2": LeRobotV21Handler,
+    # "lift2": LeRobotV21Handler,
     "pickup-blender": LeRobotPickupHandler,
     "pickup-mujoco": LeRobotPickupHandler,
     "insert-blender": LeRobotPickupHandler,
@@ -45,6 +49,39 @@ _REGISTRY: Dict[str, Type[DomainHandler]] = {
     "insert_centrifuge_5430-blender": LeRobotPickupHandler,
     "screw_loose-blender": LeRobotPickupHandler,
     "xarm-lab-data": LeRobotXArmLabHandler,
+    "lerobotv3_bench_vortex_zed_four_stereo": partial(LeRobotXArmLabHandler, view_config={
+        "available_views": [
+            "observation.images.zed_high_right_left",
+            "observation.images.zed_high_right_right",
+            "observation.images.zed_high_left_left",
+            "observation.images.zed_high_left_right",
+            "observation.images.zed_gripper_left",
+            "observation.images.zed_gripper_right",
+            "observation.images.zed_low_left_left",
+            "observation.images.zed_low_left_right",
+        ],
+        "num_sample": 2,
+        "mask_one_rate": 0.25,
+    }),
+    "lerobotv3_bench_vortex_zed_multiview": partial(LeRobotXArmLabHandler, view_config={
+        "available_views": [
+            "observation.images.zed_right",
+            "observation.images.zed_top",
+            "observation.images.zed_back_left",
+            "observation.images.zed_front",
+            "observation.images.zed_front_left",
+        ],
+        "num_sample": 2,
+        "mask_one_rate": 0.2,
+    }),
+    "lerobotv3_office_vortex_realsense": partial(LeRobotXArmLabHandler, view_config={
+        "available_views": [
+            "observation.images.realsense",
+        ],
+        "num_sample": 1,
+        "mask_one_rate": 0.0,
+    }),
+    "screw_tighten-mujoco": LeRobotPickupHandler,
     
     # LeRobot (parquet)
     "AGIBOT": AGIBOTLeRobotHandler,
@@ -90,7 +127,7 @@ _REGISTRY: Dict[str, Type[DomainHandler]] = {
     "agiworld-on-site-cloth-2": AGIWolrdHandler
 }
 
-def get_handler_cls(dataset_name: str) -> Type[DomainHandler]:
+def get_handler_cls(dataset_name: str) -> HandlerFactory:
     """Strict lookup: require explicit registration."""
     try:
         return _REGISTRY[dataset_name]
