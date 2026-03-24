@@ -50,6 +50,10 @@ class InfiniteDataReader(IterableDataset):
         self.num_actions = num_actions
         self.action_mode = action_mode
         self.xarm_weight_multiplier = float(os.getenv("XARM_WEIGHT_MULTIPLIER", "1.0"))
+        _xarm_env = os.getenv("XARM_DATASETS", "")
+        self.xarm_datasets: set[str] = set(
+            x.strip() for x in _xarm_env.split(",") if x.strip()
+        ) if _xarm_env else set()
         self.metas: Dict[str, dict] = {}
         print("use action mode:", action_mode)
         if fileio.isdir(metas_path):
@@ -123,7 +127,7 @@ class InfiniteDataReader(IterableDataset):
             ws = []
             for n in names:
                 w = float(DATA_WEIGHTS.get(n, 1.0))
-                if n == "xarm-lab-data":
+                if n in self.xarm_datasets:
                     w *= self.xarm_weight_multiplier
                 ws.append(w)
             s = sum(ws); ws = [w / s for w in ws]

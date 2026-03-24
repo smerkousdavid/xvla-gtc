@@ -69,7 +69,23 @@ echo "Data workers:    ${NUM_WORKERS}"
 echo
 
 mkdir -p "${META_DIR}" "${OUTPUT_DIR}"
-export DATA_ROOT META_DIR DATASETS_CSV MODEL_ID LOCAL_MODEL_DIR
+
+# XARM_DATASETS: comma-separated list of dataset names that receive the
+# XARM_WEIGHT_MULTIPLIER boost at training time.  Defaults to all xarm
+# datasets in DATASETS_CSV (i.e. names containing "xarm" or "lerobotv3_").
+if [[ -z "${XARM_DATASETS:-}" ]]; then
+  XARM_DATASETS=""
+  IFS=',' read -ra _ds_arr <<< "${DATASETS_CSV}"
+  for _d in "${_ds_arr[@]}"; do
+    _d="$(echo "$_d" | xargs)"  # trim whitespace
+    if [[ "$_d" == *xarm* ]] || [[ "$_d" == lerobotv3_* ]]; then
+      [[ -n "${XARM_DATASETS}" ]] && XARM_DATASETS="${XARM_DATASETS},"
+      XARM_DATASETS="${XARM_DATASETS}${_d}"
+    fi
+  done
+fi
+
+export DATA_ROOT META_DIR DATASETS_CSV MODEL_ID LOCAL_MODEL_DIR XARM_DATASETS
 
 if [[ "${LEARNING_COEF}" != "0.1" ]]; then
   echo "WARNING: LEARNING_COEF=${LEARNING_COEF}. For VLM LR = 1/10 base LR, set LEARNING_COEF=0.1"
